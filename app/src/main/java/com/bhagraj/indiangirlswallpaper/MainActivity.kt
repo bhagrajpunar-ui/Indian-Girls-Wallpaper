@@ -55,6 +55,9 @@ class MainActivity : Activity() {
     private var currentPage = 1
     private var loadedCount = 0
     private var totalAvailable = 0
+    private var searchCollectionIndex = 0
+    private var collectionLoadedCount = 0
+    private val seenWallpaperUrls = mutableSetOf<String>()
     private var isLoading = false
     private var canLoadMore = true
 
@@ -286,12 +289,51 @@ class MainActivity : Activity() {
         dialog.window?.setLayout(dialogWidth, -2)
     }
 
+    private fun collectionQueries(): List<String> {
+        return when (category) {
+            "traditional" -> listOf(
+                "indian woman traditional portrait", "indian ethnic wear woman",
+                "indian traditional dress portrait", "indian kurti woman portrait",
+                "indian salwar suit portrait", "indian cultural fashion woman"
+            )
+            "saree" -> listOf(
+                "indian woman saree portrait", "indian silk saree woman",
+                "indian saree fashion portrait", "indian woman saree traditional",
+                "indian saree model portrait", "indian woman ethnic saree"
+            )
+            "lehenga" -> listOf(
+                "indian woman lehenga portrait", "indian lehenga fashion",
+                "indian girl lehenga traditional", "indian ethnic lehenga model",
+                "indian wedding lehenga portrait", "indian festive lehenga woman"
+            )
+            "bridal" -> listOf(
+                "indian bride portrait", "indian bridal makeup portrait",
+                "indian wedding bride traditional", "indian bridal lehenga",
+                "indian bride jewelry portrait", "indian wedding fashion woman"
+            )
+            "modern" -> listOf(
+                "indian woman fashion portrait", "indian girl modern fashion",
+                "indian model portrait", "indian woman casual fashion",
+                "indian fashion photography woman", "indian girl stylish portrait"
+            )
+            else -> listOf(
+                "indian girl portrait", "indian woman traditional portrait",
+                "indian fashion portrait", "indian bridal portrait",
+                "indian saree portrait", "indian lehenga portrait",
+                "indian model portrait", "indian ethnic fashion woman"
+            )
+        }
+    }
+
     private fun fetchWallpapers(reset: Boolean = true) {
         if (reset) {
             requestNumber++
             currentPage = 1
             loadedCount = 0
             totalAvailable = 0
+            searchCollectionIndex = 0
+            collectionLoadedCount = 0
+            seenWallpaperUrls.clear()
             isLoading = false
             canLoadMore = true
             gallery.removeAllViews()
@@ -309,7 +351,10 @@ class MainActivity : Activity() {
         worker.execute {
             var connection: HttpURLConnection? = null
             try {
-                val encodedQuery = URLEncoder.encode(query.ifBlank { "indian girl portrait" }, "UTF-8")
+                val activeQuery = if (query.isBlank()) {
+                    collectionQueries().getOrElse(searchCollectionIndex) { collectionQueries().last() }
+                } else query
+                val encodedQuery = URLEncoder.encode(activeQuery, "UTF-8")
                 val endpoint = apiBase +
                     "?category=" + URLEncoder.encode(category, "UTF-8") +
                     "&query=" + encodedQuery +
@@ -357,22 +402,42 @@ class MainActivity : Activity() {
                 handler.post {
                     if (thisRequest == requestNumber) {
                         if (apiTotal > 0) totalAvailable = minOf(apiTotal, 500)
-                        showResults(results, append = pageToLoad > 1)
-                        loadedCount += results.size
+                        val uniqueResults = results.filter { item ->
+                            val key = item.imageUrl.substringBefore("?")
+                            seenWallpaperUrls.add(key)
+                        }
+                        showResults(uniqueResults, append = loadedCount > 0)
+                        loadedCount += uniqueResults.size
+                        collectionLoadedCount += results.size
                         currentPage = pageToLoad + 1
-                        canLoadMore = results.isNotEmpty() &&
-                            (totalAvailable == 0 || loadedCount < totalAvailable)
-                        count.text = if (totalAvailable > 0) {
-                            "$loadedCount / $totalAvailable wallpapers"
+
+                        val collectionFinished = results.isEmpty() ||
+                            (totalAvailable > 0 && collectionLoadedCount >= totalAvailable) ||
+                            pageToLoad >= 7
+                        if (query.isBlank() && collectionFinished &&
+                            searchCollectionIndex < collectionQueries().lastIndex) {
+                            searchCollectionIndex++
+                            currentPage = 1
+                            collectionLoadedCount = 0
+                            totalAvailable = 0
+                            canLoadMore = true
+                            isLoading = false
+                            status.text = "More wallpaper collections are loading..."
+                            handler.post { fetchWallpapers(reset = false) }
                         } else {
-                            "$loadedCount wallpapers"
+                            canLoadMore = results.isNotEmpty() &&
+                                !collectionFinished &&
+                                (totalAvailable == 0 || collectionLoadedCount < totalAvailable)
+                            count.text = "$loadedCount wallpapers"
+                            status.text = when {
+                                canLoadMore -> "HD wallpapers • Scroll down for more"
+                                query.isBlank() && searchCollectionIndex < collectionQueries().lastIndex ->
+                                    "Loading the next wallpaper collection..."
+                                loadedCount > 0 -> "All available collections for now have loaded"
+                                else -> "Is search mein wallpaper nahi mila. Dusra naam try karein."
+                            }
+                            isLoading = false
                         }
-                        status.text = when {
-                            canLoadMore -> "Pixabay HD wallpapers • Scroll down for more"
-                            loadedCount > 0 -> "You've reached the available wallpapers for this search"
-                            else -> "Is search mein wallpaper nahi mila. Dusra naam try karein."
-                        }
-                        isLoading = false
                     }
                 }
             } catch (error: Exception) {
