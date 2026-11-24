@@ -7,8 +7,6 @@ import android.content.Intent
 import android.graphics.drawable.Drawable
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.target.CustomTarget
-import com.bumptech.glide.request.transition.Transition
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -555,30 +553,18 @@ class MainActivity : Activity() {
     }
 
     private fun load(url: String, target: ImageView, fallbackUrl: String? = null) {
-        target.tag = url
-        Glide.with(this)
+        val request = Glide.with(this)
             .load(url)
             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
             .placeholder(android.R.drawable.ic_menu_gallery)
-            .error(android.R.drawable.ic_menu_report_image)
-            .into(object : CustomTarget<Drawable>() {
-                override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
-                    if (target.tag == url) target.setImageDrawable(resource)
+            .error(
+                if (!fallbackUrl.isNullOrBlank() && fallbackUrl != url) {
+                    Glide.with(this).load(fallbackUrl)
+                } else {
+                    Glide.with(this).load(android.R.drawable.ic_menu_report_image)
                 }
-
-                override fun onLoadCleared(placeholder: Drawable?) {
-                    if (target.tag == url) target.setImageDrawable(placeholder)
-                }
-
-                override fun onLoadFailed(errorDrawable: Drawable?) {
-                    if (target.tag != url) return
-                    if (!fallbackUrl.isNullOrBlank() && fallbackUrl != url) {
-                        load(fallbackUrl, target, null)
-                    } else {
-                        target.setImageDrawable(errorDrawable)
-                    }
-                }
-            })
+            )
+        request.into(target)
     }
 
     private fun download(item: Wallpaper) {
