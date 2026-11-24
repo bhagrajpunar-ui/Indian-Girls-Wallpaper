@@ -6,7 +6,7 @@ import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.request.target.CustomTarget
@@ -21,8 +21,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.widget.*
-import coil.ImageLoader
-import coil.request.ImageRequest
 import android.text.Editable
 import android.text.TextWatcher
 import org.json.JSONObject
@@ -43,7 +41,6 @@ class MainActivity : Activity() {
     private val darkPurple = Color.rgb(66, 30, 112)
     private val apiBase = "https://indian-girls-wallpaper-api.bhagrajpunar.workers.dev/"
     private val worker = Executors.newFixedThreadPool(4)
-    private val imageLoader by lazy { ImageLoader.Builder(this).crossfade(true).build() }
     private val handler = Handler(Looper.getMainLooper())
     private val searchRunnable = Runnable { fetchWallpapers() }
 
@@ -499,24 +496,24 @@ class MainActivity : Activity() {
 
     private fun load(url: String, target: ImageView) {
         target.tag = url
-        val request = ImageRequest.Builder(this)
-            .data(url)
-            .crossfade(250)
+        Glide.with(this)
+            .load(url)
+            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
             .placeholder(android.R.drawable.ic_menu_gallery)
             .error(android.R.drawable.ic_menu_report_image)
-            .target(
-                onStart = { drawable ->
-                    if (target.tag == url) target.setImageDrawable(drawable)
-                },
-                onSuccess = { drawable ->
-                    if (target.tag == url) target.setImageDrawable(drawable)
-                },
-                onError = { drawable ->
-                    if (target.tag == url) target.setImageDrawable(drawable)
+            .into(object : CustomTarget<Drawable>() {
+                override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
+                    if (target.tag == url) target.setImageDrawable(resource)
                 }
-            )
-            .build()
-        imageLoader.enqueue(request)
+
+                override fun onLoadCleared(placeholder: Drawable?) {
+                    if (target.tag == url) target.setImageDrawable(placeholder)
+                }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    if (target.tag == url) target.setImageDrawable(errorDrawable)
+                }
+            })
     }
 
     private fun download(item: Wallpaper) {
