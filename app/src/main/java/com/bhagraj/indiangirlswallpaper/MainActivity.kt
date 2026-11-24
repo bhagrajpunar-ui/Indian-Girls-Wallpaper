@@ -2,15 +2,11 @@ package com.bhagraj.indiangirlswallpaper
 
 import android.app.Activity
 import android.app.DownloadManager
-import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.target.CustomTarget
-import com.bumptech.glide.request.transition.Transition
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -68,7 +64,7 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(248, 246, 252))
+            setBackgroundColor(Color.rgb(246, 243, 251))
         }
         scrollContainer = ScrollView(this)
         val content = LinearLayout(this).apply {
@@ -142,7 +138,7 @@ class MainActivity : Activity() {
         })
 
         content.addView(TextView(this).apply {
-            text = "Beautiful portraits • HD collection"
+            text = "PREMIUM HD COLLECTION  •  DOWNLOAD YOUR FAVORITES"
             textSize = 14f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(5), 0, dp(16))
@@ -192,7 +188,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        heading.addView(label("Wallpapers"), LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(label("Premium Wallpapers"), LinearLayout.LayoutParams(0, -2, 1f))
         count = TextView(this).apply {
             textSize = 12f
             setTextColor(purple)
@@ -489,7 +485,8 @@ class MainActivity : Activity() {
             pair.forEach { item ->
                 val card = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    background = rounded(Color.WHITE, 14)
+                    background = rounded(Color.WHITE, 18)
+                    elevation = dp(3).toFloat()
                     clipToOutline = true
                     setOnClickListener { preview(item) }
                 }
@@ -541,16 +538,10 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             setPadding(0, dp(8), 0, dp(8))
         })
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(action("Download") { download(item) },
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
-        actions.addView(action("Set Wallpaper") { setWallpaper(item) },
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(4) })
-        box.addView(actions)
-        box.addView(action("Share") { share(item) },
-            LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(7) })
-        box.addView(action("Close") { dialog.dismiss() },
-            LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(7) })
+        box.addView(action("⬇  DOWNLOAD HD WALLPAPER") { download(item) },
+            LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(10) })
+        box.addView(action("CLOSE") { dialog.dismiss() },
+            LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(8) })
         dialog.setContentView(box)
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -603,40 +594,6 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             toast("Download could not start. Check internet.")
         }
-    }
-
-    private fun setWallpaper(item: Wallpaper) {
-        toast("Downloading wallpaper image...")
-        Glide.with(this)
-            .asBitmap()
-            .load(item.imageUrl)
-            .error(Glide.with(this).asBitmap().load(item.previewUrl))
-            .override(1440, 2560)
-            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-            .into(object : CustomTarget<Bitmap>() {
-                override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
-                    try {
-                        WallpaperManager.getInstance(this@MainActivity).setBitmap(resource)
-                        toast("Wallpaper set successfully!")
-                    } catch (_: Exception) {
-                        toast("Could not set wallpaper. Try again.")
-                    }
-                }
-
-                override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {}
-
-                override fun onLoadFailed(errorDrawable: android.graphics.drawable.Drawable?) {
-                    toast("Image could not load. Check internet and retry.")
-                }
-            })
-    }
-
-    private fun share(item: Wallpaper) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, item.title + "\n" + item.imageUrl)
-        }
-        startActivity(Intent.createChooser(intent, "Share wallpaper"))
     }
 
     private fun updateChips() {
