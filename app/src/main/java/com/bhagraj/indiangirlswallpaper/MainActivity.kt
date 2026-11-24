@@ -43,9 +43,15 @@ class MainActivity : Activity() {
     private lateinit var count: TextView
     private lateinit var status: TextView
     private lateinit var chips: LinearLayout
+    private lateinit var scrollContainer: ScrollView
     private var category = "all"
     private var query = ""
     private var requestNumber = 0
+    private var currentPage = 1
+    private var loadedCount = 0
+    private var totalAvailable = 0
+    private var isLoading = false
+    private var canLoadMore = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +62,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(248, 246, 252))
         }
-        val scroll = ScrollView(this)
+        scrollContainer = ScrollView(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(18), dp(16), dp(24))
@@ -162,7 +168,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     category = value
                     updateChips()
-                    fetchWallpapers()
+                    fetchWallpapers(reset = true)
                 }
             }
             chips.addView(chip, LinearLayout.LayoutParams(-2, dp(40)).apply {
@@ -212,11 +218,15 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        scroll.addView(content)
-        root.addView(scroll)
+        scrollContainer.addView(content)
+        scrollContainer.setOnScrollChangeListener { view, _, scrollY, _, _ ->
+            val distanceToBottom = content.height - (scrollY + view.height)
+            if (distanceToBottom < dp(650)) loadMoreWallpapers()
+        }
+        root.addView(scrollContainer)
         setContentView(root)
         updateChips()
-        fetchWallpapers()
+        fetchWallpapers(reset = true)
     }
 
     private fun showDeveloperProfile() {
@@ -267,12 +277,26 @@ class MainActivity : Activity() {
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(), -2)
     }
 
-    private fun fetchWallpapers() {
-        val thisRequest = ++requestNumber
-        handler.post {
-            status.text = "Searching HD wallpapers..."
-            count.text = ""
+    private fun fetchWallpapers(reset: Boolean = true) {
+        if (reset) {
+            requestNumber++
+            currentPage = 1
+            loadedCount = 0
+            totalAvailable = 0
+            isLoading = false
+            canLoadMore = true
+            gallery.removeAllViews()
         }
+        if (isLoading || !canLoadMore) return
+
+        isLoading = true
+        val thisRequest = requestNumber
+        val pageToLoad = currentPage
+        handler.post {
+            status.text = if (pageToLoad == 1) "Searching HD wallpapers..." else "Loading more HD wallpapers..."
+            if (pageToLoad == 1) count.text = ""
+        }
+
         worker.execute {
             var connection: HttpURLConnection? = null
             try {
@@ -280,7 +304,7 @@ class MainActivity : Activity() {
                 val endpoint = apiBase +
                     "?category=" + URLEncoder.encode(category, "UTF-8") +
                     "&query=" + encodedQuery +
-                    "&page=1&perPage=80"
+                    "&page=" + pageToLoad + "&perPage=80"
 
                 connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -299,6 +323,7 @@ class MainActivity : Activity() {
                 }
                 val array = json.optJSONArray("wallpapers")
                     ?: throw Exception("No wallpaper list received")
+                val apiTotal = json.optInt("totalHits", json.optInt("total", 0))
 
                 val results = ArrayList<Wallpaper>()
                 for (i in 0 until array.length()) {
@@ -321,16 +346,42 @@ class MainActivity : Activity() {
                     }
                 }
                 handler.post {
-                    if (thisRequest == requestNumber) showResults(results)
+                    if (thisRequest == requestNumber) {
+                        if (apiTotal > 0) totalAvailable = minOf(apiTotal, 500)
+                        showResults(results, append = pageToLoad > 1)
+                        loadedCount += results.size
+                        currentPage = pageToLoad + 1
+                        canLoadMore = results.isNotEmpty() &&
+                            (totalAvailable == 0 || loadedCount < totalAvailable)
+                        count.text = if (totalAvailable > 0) {
+                            "$loadedCount / $totalAvailable wallpapers"
+                        } else {
+                            "$loadedCount wallpapers"
+                        }
+                        status.text = when {
+                            canLoadMore -> "Pixabay HD wallpapers • Scroll down for more"
+                            loadedCount > 0 -> "You've reached the available wallpapers for this search"
+                            else -> "Is search mein wallpaper nahi mila. Dusra naam try karein."
+                        }
+                        isLoading = false
+                    }
                 }
             } catch (error: Exception) {
                 handler.post {
                     if (thisRequest == requestNumber) {
-                        status.text = "Wallpaper load nahi hua: ${error.message ?: "Internet check karein"}"
-                        count.text = ""
-                        gallery.removeAllViews()
-                        gallery.addView(action("Retry") { fetchWallpapers() },
-                            LinearLayout.LayoutParams(-1, dp(46)))
+                        isLoading = false
+                        status.text = if (pageToLoad == 1) {
+                            "Wallpaper load nahi hua: ${error.message ?: "Internet check karein"}"
+                        } else {
+                            "More wallpapers load nahi hue. Retry par tap karein."
+                        }
+                        if (pageToLoad == 1) {
+                            count.text = ""
+                            gallery.removeAllViews()
+                        }
+                        gallery.addView(action("Retry loading wallpapers") {
+                            fetchWallpapers(reset = pageToLoad == 1)
+                        }, LinearLayout.LayoutParams(-1, dp(46)))
                     }
                 }
             } finally {
@@ -339,11 +390,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showResults(results: List<Wallpaper>) {
-        gallery.removeAllViews()
-        count.text = "${results.size} wallpapers"
-        status.text = if (results.isEmpty()) "Is search mein wallpaper nahi mila. Dusra naam try karein." else
-            "Pixabay se HD wallpapers"
+    private fun loadMoreWallpapers() {
+        if (!isLoading && canLoadMore && loadedCount > 0) {
+            fetchWallpapers(reset = false)
+        }
+    }
+
+    private fun showResults(results: List<Wallpaper>, append: Boolean = false) {
+        if (!append) gallery.removeAllViews()
         if (results.isEmpty()) return
 
         results.chunked(2).forEach { pair ->
