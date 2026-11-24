@@ -69,6 +69,14 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
         })
         content.addView(TextView(this).apply {
+            text = "MADE BY BHAGRAJ"
+            textSize = 12f
+            setTextColor(purple)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(4), 0, dp(2))
+        })
+
+        content.addView(TextView(this).apply {
             text = "Beautiful portraits • HD collection"
             textSize = 14f
             setTextColor(Color.DKGRAY)
@@ -139,7 +147,7 @@ class MainActivity : Activity() {
         content.addView(gallery)
 
         content.addView(TextView(this).apply {
-            text = "Made with ❤️ by BHAGRAJ"
+            text = "© MADE BY BHAGRAJ"
             gravity = Gravity.CENTER
             setTextColor(Color.GRAY)
             setPadding(0, dp(25), 0, dp(8))
