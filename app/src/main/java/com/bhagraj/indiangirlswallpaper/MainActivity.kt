@@ -21,6 +21,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.widget.*
+import coil.ImageLoader
+import coil.request.ImageRequest
 import android.text.Editable
 import android.text.TextWatcher
 import org.json.JSONObject
@@ -41,6 +43,7 @@ class MainActivity : Activity() {
     private val darkPurple = Color.rgb(66, 30, 112)
     private val apiBase = "https://indian-girls-wallpaper-api.bhagrajpunar.workers.dev/"
     private val worker = Executors.newFixedThreadPool(4)
+    private val imageLoader by lazy { ImageLoader.Builder(this).crossfade(true).build() }
     private val handler = Handler(Looper.getMainLooper())
     private val searchRunnable = Runnable { fetchWallpapers() }
 
@@ -495,14 +498,25 @@ class MainActivity : Activity() {
     }
 
     private fun load(url: String, target: ImageView) {
-        // Glide handles redirects, image decoding, downsampling and memory/disk caching.
-        target.setImageDrawable(ColorDrawable(Color.rgb(235, 232, 240)))
-        Glide.with(this)
-            .load(url)
-            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-            .placeholder(ColorDrawable(Color.rgb(235, 232, 240)))
-            .error(ColorDrawable(Color.rgb(225, 221, 232)))
-            .into(target)
+        target.tag = url
+        val request = ImageRequest.Builder(this)
+            .data(url)
+            .crossfade(250)
+            .placeholder(android.R.drawable.ic_menu_gallery)
+            .error(android.R.drawable.ic_menu_report_image)
+            .target(
+                onStart = { drawable ->
+                    if (target.tag == url) target.setImageDrawable(drawable)
+                },
+                onSuccess = { drawable ->
+                    if (target.tag == url) target.setImageDrawable(drawable)
+                },
+                onError = { drawable ->
+                    if (target.tag == url) target.setImageDrawable(drawable)
+                }
+            )
+            .build()
+        imageLoader.enqueue(request)
     }
 
     private fun download(item: Wallpaper) {
