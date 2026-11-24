@@ -56,6 +56,7 @@ class MainActivity : Activity() {
     private val seenWallpaperUrls = mutableSetOf<String>()
     private var isLoading = false
     private var canLoadMore = true
+    private var retryButton: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -323,6 +324,8 @@ class MainActivity : Activity() {
 
     private fun fetchWallpapers(reset: Boolean = true) {
         if (reset) {
+            retryButton?.let { gallery.removeView(it) }
+            retryButton = null
             requestNumber++
             currentPage = 1
             loadedCount = 0
@@ -398,6 +401,8 @@ class MainActivity : Activity() {
                 handler.post {
                     if (thisRequest == requestNumber) {
                         if (apiTotal > 0) totalAvailable = minOf(apiTotal, 500)
+                        retryButton?.let { gallery.removeView(it) }
+                        retryButton = null
                         val uniqueResults = results.filter { item ->
                             val key = item.imageUrl.substringBefore("?")
                             seenWallpaperUrls.add(key)
@@ -440,6 +445,7 @@ class MainActivity : Activity() {
                 handler.post {
                     if (thisRequest == requestNumber) {
                         isLoading = false
+                        canLoadMore = false
                         status.text = if (pageToLoad == 1) {
                             "Wallpaper load nahi hua: ${error.message ?: "Internet check karein"}"
                         } else {
@@ -449,9 +455,14 @@ class MainActivity : Activity() {
                             count.text = ""
                             gallery.removeAllViews()
                         }
-                        gallery.addView(action("Retry loading wallpapers") {
+                        retryButton?.let { gallery.removeView(it) }
+                        retryButton = action("Retry loading wallpapers") {
+                            retryButton?.let { gallery.removeView(it) }
+                            retryButton = null
+                            canLoadMore = true
                             fetchWallpapers(reset = pageToLoad == 1)
-                        }, LinearLayout.LayoutParams(-1, dp(46)))
+                        }
+                        gallery.addView(retryButton, LinearLayout.LayoutParams(-1, dp(46)))
                     }
                 }
             } finally {
