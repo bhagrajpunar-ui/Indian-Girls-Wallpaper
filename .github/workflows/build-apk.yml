@@ -25,6 +25,11 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+      - name: Prepare Bhagraj app icon
+        shell: bash
+        run: |
+          mkdir -p app/src/main/res/drawable-nodpi
+          base64 --decode app/icon-base64.txt > app/src/main/res/drawable-nodpi/ic_launcher.jpg
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
