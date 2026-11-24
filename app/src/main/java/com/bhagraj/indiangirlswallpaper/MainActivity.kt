@@ -475,22 +475,67 @@ class MainActivity : Activity() {
 
     private fun load(url: String, target: ImageView) {
         target.tag = url
+        target.setImageDrawable(null)
+        target.setBackgroundColor(Color.rgb(235, 232, 240))
+
         worker.execute {
-            var connection: HttpURLConnection? = null
-            try {
-                connection = URL(url).openConnection() as HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 20000
-                val bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
-                handler.post {
-                    if (target.tag == url && bitmap != null) target.setImageBitmap(bitmap)
+            var bitmap: android.graphics.Bitmap? = null
+            var lastError: Exception? = null
+
+            // Retry temporary network failures and image-server throttling.
+            for (attempt in 1..3) {
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 12000
+                        readTimeout = 20000
+                        instanceFollowRedirects = true
+                        useCaches = true
+                        setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Android) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")
+                    }
+
+                    val code = connection.responseCode
+                    if (code !in 200..299) {
+                        throw Exception("Image server HTTP $code")
+                    }
+
+                    val contentType = connection.contentType.orEmpty()
+                    if (contentType.isNotBlank() && !contentType.startsWith("image/", true)) {
+                        throw Exception("Server did not return an image")
+                    }
+
+                    bitmap = connection.inputStream.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    } ?: throw Exception("Image format could not be decoded")
+
+                    lastError = null
+                    break
+                } catch (error: Exception) {
+                    lastError = error
+                    if (attempt < 3) {
+                        try { Thread.sleep(350L * attempt) } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            break
+                        }
+                    }
+                } finally {
+                    connection?.disconnect()
                 }
-            } catch (_: Exception) {
-                handler.post {
-                    if (target.tag == url) target.setImageResource(android.R.drawable.ic_menu_gallery)
+            }
+
+            val loadedBitmap = bitmap
+            handler.post {
+                if (target.tag == url) {
+                    if (loadedBitmap != null) {
+                        target.setImageBitmap(loadedBitmap)
+                    } else {
+                        // Keep a clean placeholder instead of showing a broken-image icon.
+                        target.setImageDrawable(null)
+                        target.setBackgroundColor(Color.rgb(225, 221, 232))
+                    }
                 }
-            } finally {
-                connection?.disconnect()
             }
         }
     }
