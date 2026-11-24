@@ -433,7 +433,7 @@ class MainActivity : Activity() {
                     contentDescription = item.title
                 }
                 card.addView(image)
-                load(item.previewUrl, image)
+                load(item.previewUrl, image, item.imageUrl)
                 card.addView(TextView(this).apply {
                     text = item.title
                     textSize = 12f
