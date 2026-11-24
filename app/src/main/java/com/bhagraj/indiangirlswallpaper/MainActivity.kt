@@ -70,12 +70,14 @@ class MainActivity : Activity() {
         scrollContainer = ScrollView(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(18), dp(16), dp(24))
+            setPadding(dp(16), dp(34), dp(16), dp(24))
         }
 
         content.addView(TextView(this).apply {
             text = "INDIAN GIRLS WALLPAPER"
-            textSize = 22f
+            textSize = if (resources.configuration.screenWidthDp < 400) 18f else 22f
+            maxLines = 1
+            includeFontPadding = true
             setTextColor(darkPurple)
             typeface = Typeface.DEFAULT_BOLD
         })
