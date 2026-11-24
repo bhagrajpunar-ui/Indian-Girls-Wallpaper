@@ -5,7 +5,12 @@ import android.app.DownloadManager
 import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.drawable.ColorDrawable
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -474,70 +479,14 @@ class MainActivity : Activity() {
     }
 
     private fun load(url: String, target: ImageView) {
-        target.tag = url
-        target.setImageDrawable(null)
-        target.setBackgroundColor(Color.rgb(235, 232, 240))
-
-        worker.execute {
-            var bitmap: android.graphics.Bitmap? = null
-            var lastError: Exception? = null
-
-            // Retry temporary network failures and image-server throttling.
-            for (attempt in 1..3) {
-                var connection: HttpURLConnection? = null
-                try {
-                    connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        connectTimeout = 12000
-                        readTimeout = 20000
-                        instanceFollowRedirects = true
-                        useCaches = true
-                        setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Android) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")
-                    }
-
-                    val code = connection.responseCode
-                    if (code !in 200..299) {
-                        throw Exception("Image server HTTP $code")
-                    }
-
-                    val contentType = connection.contentType.orEmpty()
-                    if (contentType.isNotBlank() && !contentType.startsWith("image/", true)) {
-                        throw Exception("Server did not return an image")
-                    }
-
-                    bitmap = connection.inputStream.use { stream ->
-                        BitmapFactory.decodeStream(stream)
-                    } ?: throw Exception("Image format could not be decoded")
-
-                    lastError = null
-                    break
-                } catch (error: Exception) {
-                    lastError = error
-                    if (attempt < 3) {
-                        try { Thread.sleep(350L * attempt) } catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                            break
-                        }
-                    }
-                } finally {
-                    connection?.disconnect()
-                }
-            }
-
-            val loadedBitmap = bitmap
-            handler.post {
-                if (target.tag == url) {
-                    if (loadedBitmap != null) {
-                        target.setImageBitmap(loadedBitmap)
-                    } else {
-                        // Keep a clean placeholder instead of showing a broken-image icon.
-                        target.setImageDrawable(null)
-                        target.setBackgroundColor(Color.rgb(225, 221, 232))
-                    }
-                }
-            }
-        }
+        // Glide handles redirects, image decoding, downsampling and memory/disk caching.
+        target.setImageDrawable(ColorDrawable(Color.rgb(235, 232, 240)))
+        Glide.with(this)
+            .load(url)
+            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+            .placeholder(ColorDrawable(Color.rgb(235, 232, 240)))
+            .error(ColorDrawable(Color.rgb(225, 221, 232)))
+            .into(target)
     }
 
     private fun download(item: Wallpaper) {
@@ -558,23 +507,28 @@ class MainActivity : Activity() {
     }
 
     private fun setWallpaper(item: Wallpaper) {
-        toast("Setting wallpaper...")
-        worker.execute {
-            var connection: HttpURLConnection? = null
-            try {
-                connection = URL(item.imageUrl).openConnection() as HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 20000
-                val bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
-                    ?: throw IllegalStateException("Image could not be decoded")
-                WallpaperManager.getInstance(this).setBitmap(bitmap)
-                handler.post { toast("Wallpaper set successfully!") }
-            } catch (_: Exception) {
-                handler.post { toast("Could not set wallpaper. Try again.") }
-            } finally {
-                connection?.disconnect()
-            }
-        }
+        toast("Downloading wallpaper image...")
+        Glide.with(this)
+            .asBitmap()
+            .load(item.imageUrl)
+            .override(1440, 2560)
+            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+            .into(object : CustomTarget<Bitmap>() {
+                override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
+                    try {
+                        WallpaperManager.getInstance(this@MainActivity).setBitmap(resource)
+                        toast("Wallpaper set successfully!")
+                    } catch (_: Exception) {
+                        toast("Could not set wallpaper. Try again.")
+                    }
+                }
+
+                override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {}
+
+                override fun onLoadFailed(errorDrawable: android.graphics.drawable.Drawable?) {
+                    toast("Image could not load. Check internet and retry.")
+                }
+            })
     }
 
     private fun share(item: Wallpaper) {
