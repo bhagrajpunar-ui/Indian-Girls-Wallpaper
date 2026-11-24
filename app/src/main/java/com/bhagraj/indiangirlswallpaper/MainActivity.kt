@@ -5,7 +5,6 @@ import android.app.DownloadManager
 import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -16,43 +15,43 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.ViewGroup
 import android.widget.*
 import android.text.Editable
 import android.text.TextWatcher
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.Executors
 
-data class Wallpaper(val title: String, val category: String, val url: String)
+data class Wallpaper(
+    val title: String,
+    val category: String,
+    val previewUrl: String,
+    val imageUrl: String
+)
 
 class MainActivity : Activity() {
     private val purple = Color.rgb(104, 55, 165)
     private val darkPurple = Color.rgb(66, 30, 112)
-    private val worker = Executors.newFixedThreadPool(3)
+    private val apiBase = "https://indian-girls-wallpaper-api.bhagrajpunar.workers.dev/"
+    private val worker = Executors.newFixedThreadPool(4)
     private val handler = Handler(Looper.getMainLooper())
+    private val searchRunnable = Runnable { fetchWallpapers() }
+
     private lateinit var gallery: LinearLayout
     private lateinit var count: TextView
-    private var category = "All"
+    private lateinit var status: TextView
+    private lateinit var chips: LinearLayout
+    private var category = "all"
     private var query = ""
-
-    private val items = listOf(
-        Wallpaper("Graceful Portrait", "Traditional", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Elegant Style", "Modern", "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Beautiful Look", "Saree", "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Fashion Portrait", "Modern", "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Classic Beauty", "Traditional", "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Soft Glamour", "Bridal", "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Festive Mood", "Lehenga", "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Beauty in Style", "Saree", "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Natural Glow", "Traditional", "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=85"),
-        Wallpaper("Portrait Mood", "Bridal", "https://images.unsplash.com/photo-1512316609839-ce289d3d7b8c?auto=format&fit=crop&w=900&q=85")
-    )
+    private var requestNumber = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = darkPurple
         window.navigationBarColor = Color.BLACK
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(248, 246, 252))
@@ -62,6 +61,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(18), dp(16), dp(24))
         }
+
         content.addView(TextView(this).apply {
             text = "INDIAN GIRLS WALLPAPER"
             textSize = 22f
@@ -74,71 +74,174 @@ class MainActivity : Activity() {
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(5), 0, dp(16))
         })
+
         val search = EditText(this).apply {
-            hint = "Search wallpapers..."
+            hint = "Search: saree, bridal, traditional..."
             isSingleLine = true
             textSize = 15f
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = rounded(Color.WHITE, 14)
         }
         content.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
+
         content.addView(label("Explore Categories"))
-        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val chipScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        listOf("All", "Traditional", "Saree", "Lehenga", "Bridal", "Modern").forEach { name ->
+        chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+        }
+        listOf(
+            "All" to "all",
+            "Traditional" to "traditional",
+            "Saree" to "saree",
+            "Lehenga" to "lehenga",
+            "Bridal" to "bridal",
+            "Modern" to "modern"
+        ).forEach { (name, value) ->
             val chip = TextView(this).apply {
                 text = name
                 textSize = 13f
-                setTextColor(Color.WHITE)
-                setPadding(dp(14), dp(10), dp(14), dp(10))
-                background = rounded(purple, 24)
-                setOnClickListener { category = name; render(); updateChips(chips) }
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setOnClickListener {
+                    category = value
+                    updateChips()
+                    fetchWallpapers()
+                }
             }
-            chips.addView(chip, LinearLayout.LayoutParams(-2, dp(40)).apply { rightMargin = dp(7) })
+            chips.addView(chip, LinearLayout.LayoutParams(-2, dp(40)).apply {
+                rightMargin = dp(7)
+            })
         }
         chipScroll.addView(chips)
         content.addView(chipScroll)
-        val heading = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        heading.addView(label("Popular Wallpapers"), LinearLayout.LayoutParams(0, -2, 1f))
-        count = TextView(this).apply { textSize = 12f; setTextColor(purple) }
+
+        val heading = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        heading.addView(label("Wallpapers"), LinearLayout.LayoutParams(0, -2, 1f))
+        count = TextView(this).apply {
+            textSize = 12f
+            setTextColor(purple)
+        }
         heading.addView(count)
         content.addView(heading)
+
+        status = TextView(this).apply {
+            text = "Loading HD wallpapers..."
+            textSize = 13f
+            setTextColor(Color.DKGRAY)
+            setPadding(0, dp(4), 0, dp(10))
+        }
+        content.addView(status)
+
         gallery = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(gallery)
+
         content.addView(TextView(this).apply {
             text = "Made with ❤️ by BHAGRAJ"
             gravity = Gravity.CENTER
             setTextColor(Color.GRAY)
             setPadding(0, dp(25), 0, dp(8))
         })
+
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                query = s?.toString()?.trim()?.lowercase() ?: ""
-                render()
+                query = s?.toString()?.trim() ?: ""
+                handler.removeCallbacks(searchRunnable)
+                handler.postDelayed(searchRunnable, 550)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+
         scroll.addView(content)
         root.addView(scroll)
         setContentView(root)
-        render()
-        updateChips(chips)
+        updateChips()
+        fetchWallpapers()
     }
 
-    private fun render() {
-        if (!::gallery.isInitialized) return
+    private fun fetchWallpapers() {
+        val thisRequest = ++requestNumber
+        handler.post {
+            status.text = "Searching HD wallpapers..."
+            count.text = ""
+        }
+        worker.execute {
+            var connection: HttpURLConnection? = null
+            try {
+                val encodedQuery = URLEncoder.encode(query.ifBlank { "indian girl portrait" }, "UTF-8")
+                val endpoint = apiBase +
+                    "?category=" + URLEncoder.encode(category, "UTF-8") +
+                    "&query=" + encodedQuery +
+                    "&page=1&perPage=80"
+
+                connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 20000
+                    setRequestProperty("Accept", "application/json")
+                }
+                val code = connection.responseCode
+                val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                if (code !in 200..299) throw Exception("Server returned HTTP $code")
+
+                val json = JSONObject(body)
+                if (!json.optBoolean("success", false)) {
+                    throw Exception(json.optString("error", "Wallpaper search failed"))
+                }
+                val array = json.optJSONArray("wallpapers")
+                    ?: throw Exception("No wallpaper list received")
+
+                val results = ArrayList<Wallpaper>()
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val preview = item.optString("image").ifBlank {
+                        item.optString("preview")
+                    }
+                    val full = item.optString("largeImage").ifBlank {
+                        item.optString("image").ifBlank { item.optString("preview") }
+                    }
+                    if (preview.isNotBlank() && full.isNotBlank()) {
+                        results.add(
+                            Wallpaper(
+                                title = item.optString("title", "Indian Wallpaper"),
+                                category = category.replaceFirstChar { it.uppercase() },
+                                previewUrl = preview,
+                                imageUrl = full
+                            )
+                        )
+                    }
+                }
+                handler.post {
+                    if (thisRequest == requestNumber) showResults(results)
+                }
+            } catch (error: Exception) {
+                handler.post {
+                    if (thisRequest == requestNumber) {
+                        status.text = "Wallpaper load nahi hua: ${error.message ?: "Internet check karein"}"
+                        count.text = ""
+                        gallery.removeAllViews()
+                        gallery.addView(action("Retry") { fetchWallpapers() },
+                            LinearLayout.LayoutParams(-1, dp(46)))
+                    }
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    private fun showResults(results: List<Wallpaper>) {
         gallery.removeAllViews()
-        val filtered = items.filter {
-            (category == "All" || it.category.equals(category, true)) &&
-            (query.isBlank() || it.title.lowercase().contains(query) || it.category.lowercase().contains(query))
-        }
-        count.text = "${filtered.size} wallpapers"
-        if (filtered.isEmpty()) {
-            gallery.addView(TextView(this).apply { text = "No wallpapers found"; gravity = Gravity.CENTER; setPadding(0, dp(30), 0, dp(30)) })
-            return
-        }
-        filtered.chunked(2).forEach { pair ->
+        count.text = "${results.size} wallpapers"
+        status.text = if (results.isEmpty()) "Is search mein wallpaper nahi mila. Dusra naam try karein." else
+            "Pixabay se HD wallpapers"
+        if (results.isEmpty()) return
+
+        results.chunked(2).forEach { pair ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             pair.forEach { item ->
                 val card = LinearLayout(this).apply {
@@ -154,18 +257,23 @@ class MainActivity : Activity() {
                     contentDescription = item.title
                 }
                 card.addView(image)
-                load(item.url, image)
+                load(item.previewUrl, image)
                 card.addView(TextView(this).apply {
-                    text = item.title + "\n" + item.category
+                    text = item.title
                     textSize = 12f
                     setTextColor(Color.DKGRAY)
                     setPadding(dp(9), dp(8), dp(5), dp(10))
+                    maxLines = 2
                 })
                 row.addView(card, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                    leftMargin = dp(5); rightMargin = dp(5); bottomMargin = dp(12)
+                    leftMargin = dp(5)
+                    rightMargin = dp(5)
+                    bottomMargin = dp(12)
                 })
             }
-            if (pair.size == 1) row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            if (pair.size == 1) {
+                row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            }
             gallery.addView(row)
         }
     }
@@ -177,19 +285,29 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
             setBackgroundColor(Color.BLACK)
         }
-        val image = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.BLACK) }
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.BLACK)
+        }
         box.addView(image, LinearLayout.LayoutParams(-1, 0, 1f))
-        load(item.url, image)
+        load(item.imageUrl, image)
         box.addView(TextView(this).apply {
-            text = item.title; gravity = Gravity.CENTER; textSize = 16f
-            setTextColor(Color.WHITE); setPadding(0, dp(8), 0, dp(8))
+            text = item.title
+            gravity = Gravity.CENTER
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            setPadding(0, dp(8), 0, dp(8))
         })
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(action("Download") { download(item) }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
-        actions.addView(action("Set Wallpaper") { setWallpaper(item) }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(4) })
+        actions.addView(action("Download") { download(item) },
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
+        actions.addView(action("Set Wallpaper") { setWallpaper(item) },
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(4) })
         box.addView(actions)
-        box.addView(action("Share") { share(item) }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(7) })
-        box.addView(action("Close") { dialog.dismiss() }, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(7) })
+        box.addView(action("Share") { share(item) },
+            LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(7) })
+        box.addView(action("Close") { dialog.dismiss() },
+            LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(7) })
         dialog.setContentView(box)
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -199,79 +317,115 @@ class MainActivity : Activity() {
     private fun load(url: String, target: ImageView) {
         target.tag = url
         worker.execute {
+            var connection: HttpURLConnection? = null
             try {
-                val c = URL(url).openConnection() as HttpURLConnection
-                c.connectTimeout = 12000; c.readTimeout = 15000
-                val bitmap = c.inputStream.use { BitmapFactory.decodeStream(it) }
-                c.disconnect()
-                handler.post { if (target.tag == url && bitmap != null) target.setImageBitmap(bitmap) }
+                connection = URL(url).openConnection() as HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                val bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
+                handler.post {
+                    if (target.tag == url && bitmap != null) target.setImageBitmap(bitmap)
+                }
             } catch (_: Exception) {
-                handler.post { if (target.tag == url) target.setImageResource(android.R.drawable.ic_menu_gallery) }
+                handler.post {
+                    if (target.tag == url) target.setImageResource(android.R.drawable.ic_menu_gallery)
+                }
+            } finally {
+                connection?.disconnect()
             }
         }
     }
 
     private fun download(item: Wallpaper) {
         try {
-            val request = DownloadManager.Request(Uri.parse(item.url))
+            val request = DownloadManager.Request(Uri.parse(item.imageUrl))
                 .setTitle(item.title)
-                .setDescription("Downloading wallpaper")
+                .setDescription("Downloading HD wallpaper")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, "IndianGirlsWallpaper/${item.title.replace(" ", "_")}.jpg")
+                .setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_PICTURES,
+                    "IndianGirlsWallpaper/${item.title.replace(" ", "_")}.jpg"
+                )
             (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
             toast("Download started. Check notifications.")
-        } catch (_: Exception) { toast("Download could not start. Check internet.") }
+        } catch (_: Exception) {
+            toast("Download could not start. Check internet.")
+        }
     }
 
     private fun setWallpaper(item: Wallpaper) {
         toast("Setting wallpaper...")
         worker.execute {
+            var connection: HttpURLConnection? = null
             try {
-                val c = URL(item.url).openConnection() as HttpURLConnection
-                c.connectTimeout = 12000; c.readTimeout = 15000
-                val bitmap = c.inputStream.use { BitmapFactory.decodeStream(it) }
-                c.disconnect()
-                if (bitmap == null) throw IllegalStateException()
+                connection = URL(item.imageUrl).openConnection() as HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                val bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
+                    ?: throw IllegalStateException("Image could not be decoded")
                 WallpaperManager.getInstance(this).setBitmap(bitmap)
                 handler.post { toast("Wallpaper set successfully!") }
-            } catch (_: Exception) { handler.post { toast("Could not set wallpaper. Try again.") } }
+            } catch (_: Exception) {
+                handler.post { toast("Could not set wallpaper. Try again.") }
+            } finally {
+                connection?.disconnect()
+            }
         }
     }
 
     private fun share(item: Wallpaper) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, item.title + "\n" + item.url)
+            putExtra(Intent.EXTRA_TEXT, item.title + "\n" + item.imageUrl)
         }
         startActivity(Intent.createChooser(intent, "Share wallpaper"))
     }
 
-    private fun updateChips(row: LinearLayout) {
-        for (i in 0 until row.childCount) {
-            val chip = row.getChildAt(i) as TextView
-            val active = chip.text.toString() == category
+    private fun updateChips() {
+        for (i in 0 until chips.childCount) {
+            val chip = chips.getChildAt(i) as TextView
+            val active = when (chip.text.toString()) {
+                "All" -> "all"
+                "Traditional" -> "traditional"
+                "Saree" -> "saree"
+                "Lehenga" -> "lehenga"
+                "Bridal" -> "bridal"
+                else -> "modern"
+            } == category
             chip.background = rounded(if (active) purple else Color.WHITE, 24)
             chip.setTextColor(if (active) Color.WHITE else darkPurple)
         }
     }
 
     private fun label(value: String) = TextView(this).apply {
-        text = value; textSize = 19f; setTextColor(Color.BLACK)
-        typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(20), 0, dp(12))
+        text = value
+        textSize = 19f
+        setTextColor(Color.BLACK)
+        typeface = Typeface.DEFAULT_BOLD
+        setPadding(0, dp(20), 0, dp(12))
     }
+
     private fun action(value: String, fn: () -> Unit) = TextView(this).apply {
-        text = value; gravity = Gravity.CENTER; textSize = 12f
-        typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
-        background = rounded(purple, 12); setOnClickListener { fn() }
+        text = value
+        gravity = Gravity.CENTER
+        textSize = 13f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(Color.WHITE)
+        background = rounded(purple, 12)
+        setOnClickListener { fn() }
     }
+
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
-        setColor(color); cornerRadius = dp(radius).toFloat()
+        setColor(color)
+        cornerRadius = dp(radius).toFloat()
     }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun toast(value: String) = Toast.makeText(this, value, Toast.LENGTH_SHORT).show()
 
     override fun onDestroy() {
+        handler.removeCallbacks(searchRunnable)
+        worker.shutdownNow()
         super.onDestroy()
-        worker.shutdown()
     }
 }
