@@ -466,7 +466,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.BLACK)
         }
         box.addView(image, LinearLayout.LayoutParams(-1, 0, 1f))
-        load(item.imageUrl, image)
+        load(item.imageUrl, image, item.previewUrl)
         box.addView(TextView(this).apply {
             text = item.title
             gravity = Gravity.CENTER
@@ -494,7 +494,7 @@ class MainActivity : Activity() {
         dialog.window?.setLayout(dialogWidth, dialogHeight)
     }
 
-    private fun load(url: String, target: ImageView) {
+    private fun load(url: String, target: ImageView, fallbackUrl: String? = null) {
         target.tag = url
         Glide.with(this)
             .load(url)
@@ -511,7 +511,12 @@ class MainActivity : Activity() {
                 }
 
                 override fun onLoadFailed(errorDrawable: Drawable?) {
-                    if (target.tag == url) target.setImageDrawable(errorDrawable)
+                    if (target.tag != url) return
+                    if (!fallbackUrl.isNullOrBlank() && fallbackUrl != url) {
+                        load(fallbackUrl, target, null)
+                    } else {
+                        target.setImageDrawable(errorDrawable)
+                    }
                 }
             })
     }
@@ -538,6 +543,7 @@ class MainActivity : Activity() {
         Glide.with(this)
             .asBitmap()
             .load(item.imageUrl)
+            .error(Glide.with(this).asBitmap().load(item.previewUrl))
             .override(1440, 2560)
             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
             .into(object : CustomTarget<Bitmap>() {
