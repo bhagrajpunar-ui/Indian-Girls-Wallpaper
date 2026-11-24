@@ -76,7 +76,7 @@ class MainActivity : Activity() {
         })
         val search = EditText(this).apply {
             hint = "Search wallpapers..."
-            singleLine = true
+            isSingleLine = true
             textSize = 15f
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = rounded(Color.WHITE, 14)
