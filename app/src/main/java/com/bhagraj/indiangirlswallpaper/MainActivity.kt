@@ -279,7 +279,9 @@ class MainActivity : Activity() {
         dialog.setContentView(box)
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(), -2)
+        val maxDialogWidth = dp(560)
+        val dialogWidth = minOf((resources.displayMetrics.widthPixels * 0.88f).toInt(), maxDialogWidth)
+        dialog.window?.setLayout(dialogWidth, -2)
     }
 
     private fun fetchWallpapers(reset: Boolean = true) {
@@ -405,7 +407,17 @@ class MainActivity : Activity() {
         if (!append) gallery.removeAllViews()
         if (results.isEmpty()) return
 
-        results.chunked(2).forEach { pair ->
+        val screenWidthDp = resources.configuration.screenWidthDp
+        val columns = when {
+            screenWidthDp >= 900 -> 4
+            screenWidthDp >= 600 -> 3
+            else -> 2
+        }
+        val availableWidth = screenWidthDp - 32
+        val cardWidthDp = availableWidth / columns
+        val imageHeightDp = (cardWidthDp * 1.28f).toInt().coerceIn(180, 360)
+
+        results.chunked(columns).forEach { pair ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             pair.forEach { item ->
                 val card = LinearLayout(this).apply {
@@ -415,7 +427,7 @@ class MainActivity : Activity() {
                     setOnClickListener { preview(item) }
                 }
                 val image = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(-1, dp(220))
+                    layoutParams = LinearLayout.LayoutParams(-1, dp(imageHeightDp))
                     scaleType = ImageView.ScaleType.CENTER_CROP
                     setBackgroundColor(Color.LTGRAY)
                     contentDescription = item.title
@@ -475,7 +487,11 @@ class MainActivity : Activity() {
         dialog.setContentView(box)
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout(-1, (resources.displayMetrics.heightPixels * 0.88f).toInt())
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val dialogWidth = minOf((screenWidth * 0.94f).toInt(), dp(760))
+        val dialogHeight = (screenHeight * 0.90f).toInt()
+        dialog.window?.setLayout(dialogWidth, dialogHeight)
     }
 
     private fun load(url: String, target: ImageView) {
