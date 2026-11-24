@@ -76,6 +76,55 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), 0, dp(2))
         })
 
+        // Developer profile card using the launcher photo.
+        val developerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.WHITE, 16)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showDeveloperProfile() }
+        }
+        developerCard.addView(ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(58), dp(58))
+            setImageResource(R.drawable.ic_launcher)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.LTGRAY)
+            }
+            clipToOutline = true
+            contentDescription = "Bhagraj developer profile photo"
+        })
+        val developerText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        developerText.addView(TextView(this).apply {
+            text = "BHAGRAJ"
+            textSize = 16f
+            setTextColor(darkPurple)
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        developerText.addView(TextView(this).apply {
+            text = "App Developer • Creator"
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            setPadding(0, dp(3), 0, 0)
+        })
+        developerCard.addView(developerText, LinearLayout.LayoutParams(0, -2, 1f))
+        developerCard.addView(TextView(this).apply {
+            text = "About"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(purple)
+        })
+        content.addView(developerCard, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(4)
+        })
+
         content.addView(TextView(this).apply {
             text = "Beautiful portraits • HD collection"
             textSize = 14f
@@ -168,6 +217,54 @@ class MainActivity : Activity() {
         setContentView(root)
         updateChips()
         fetchWallpapers()
+    }
+
+    private fun showDeveloperProfile() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24), dp(24), dp(24), dp(20))
+            background = rounded(Color.WHITE, 20)
+        }
+        box.addView(ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(112), dp(112))
+            setImageResource(R.drawable.ic_launcher)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.LTGRAY)
+            }
+            clipToOutline = true
+            contentDescription = "Bhagraj developer photo"
+        })
+        box.addView(TextView(this).apply {
+            text = "MADE BY BHAGRAJ"
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(darkPurple)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(14), 0, dp(4))
+        })
+        box.addView(TextView(this).apply {
+            text = "Developer & Creator of Indian Girls Wallpaper"
+            textSize = 13f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+        })
+        box.addView(TextView(this).apply {
+            text = "Thank you for using my app!"
+            textSize = 12f
+            setTextColor(purple)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(4))
+        })
+        val dialog = android.app.Dialog(this)
+        box.addView(action("Close") { dialog.dismiss() },
+            LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(14) })
+        dialog.setContentView(box)
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(), -2)
     }
 
     private fun fetchWallpapers() {
