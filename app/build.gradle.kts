@@ -23,7 +23,6 @@ android {
 }
 
 dependencies {
-    implementation("io.coil-kt:coil:2.7.0")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 }
